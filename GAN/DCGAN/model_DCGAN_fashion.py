@@ -1,44 +1,39 @@
 import tensorflow as tf
+import datetime
+
+# Tensorboard checkpoints:
+log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+train_gen_log_dir = 'logs/gradient_tape/' + current_time + '/gen_train'
+train_disc_log_dir = 'logs/gradient_tape/' + current_time + '/gen_train'
+gen_summary_writer = tf.summary.create_file_writer(train_gen_log_dir)
+disc_summary_writer = tf.summary.create_file_writer(train_disc_log_dir)
 
 discriminative_net = tf.keras.Sequential(
       [
-          tf.keras.layers.InputLayer(input_shape=(128, 128,  1)),
+          tf.keras.layers.InputLayer(input_shape=(28, 28,  1)),
           tf.keras.layers.Conv2D(filters=64, kernel_size=5, strides=(2, 2), padding="SAME"),
           tf.keras.layers.LeakyReLU(),
           tf.keras.layers.Dropout(0.3),
           tf.keras.layers.Conv2D(filters=128, kernel_size=5, strides=(2, 2), padding="SAME"),
           tf.keras.layers.LeakyReLU(),
           tf.keras.layers.Dropout(0.3),
-          tf.keras.layers.Conv2D(filters=256, kernel_size=5, strides=(2, 2), padding="SAME"),
-          tf.keras.layers.LeakyReLU(),
-          tf.keras.layers.Dropout(0.3),
-          tf.keras.layers.Conv2D(filters=512, kernel_size=8, strides=(2, 2), padding="SAME"),
-          tf.keras.layers.LeakyReLU(),
-          tf.keras.layers.Dropout(0.3),
-          tf.keras.layers.Conv2D(filters=1024, kernel_size=8, strides=(2, 2), padding="SAME"),
           tf.keras.layers.Flatten(),
           tf.keras.layers.Dense(1)
       ]
     )
-
 generative_net = tf.keras.Sequential(
     [
         tf.keras.layers.InputLayer(input_shape=(100,)),
-        tf.keras.layers.Dense(4*4*1024),
-        tf.keras.layers.Reshape((4, 4, 1024)),
-        tf.keras.layers.Conv2DTranspose(filters=512, kernel_size=8, strides=(2, 2), padding="SAME"),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.LeakyReLU(),
-        tf.keras.layers.Conv2DTranspose(filters=256, kernel_size=5, strides=(2, 2), padding="SAME"),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.LeakyReLU(),
-        tf.keras.layers.Conv2DTranspose(filters=128, kernel_size=5, strides=(2, 2), padding="SAME"),
-        tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.Dense(7*7*128),
+        tf.keras.layers.Reshape((7, 7, 128)),
         tf.keras.layers.Conv2DTranspose(filters=64, kernel_size=5, strides=(2, 2), padding="SAME"),
         tf.keras.layers.BatchNormalization(),
         tf.keras.layers.LeakyReLU(),
-        tf.keras.layers.Conv2DTranspose(filters=1, kernel_size=5, strides=(2, 2), padding="SAME", activation='tanh'),
+        tf.keras.layers.Conv2DTranspose(filters=28, kernel_size=5, strides=(2, 2), padding="SAME"),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.LeakyReLU(),
+        tf.keras.layers.Conv2DTranspose(filters=1, kernel_size=4, strides=(1, 1), padding="SAME", activation='tanh'),
     ]
 )
 
@@ -68,7 +63,7 @@ discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
 # To finish defining our model, we should create a train_step funct:
 # Use of decorator to make tf compute the funct in a graph:
 @tf.function
-def dcgan_train_step(images, batch_size, noise_dim):
+def dcgan_train_step(images, batch_size, noise_dim, epoch):
     # First create a noise to pass through generative model:
     noise = tf.random.normal([batch_size, noise_dim])
 
@@ -82,6 +77,10 @@ def dcgan_train_step(images, batch_size, noise_dim):
         # Compute loss:
         gen_loss = generator_loss(fake_output)
         disc_loss = discriminator_loss(real_output, fake_output)
+        with gen_summary_writer.as_default():
+          tf.summary.scalar('gen_loss', gen_loss, step=epoch)
+        with disc_summary_writer.as_default():
+          tf.summary.scalar('disc_loss', disc_loss, step=epoch)
 
     # Compute gradients:
     gradients_of_generator = gen_tape.gradient(gen_loss, generative_net.trainable_variables)
